@@ -2,11 +2,14 @@ package v1
 
 import (
 	"fmt"
+	"net/http"
 	"runtime"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/goccy/go-json"
 
 	"github.com/creachadair/taskgroup"
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -86,6 +89,8 @@ func NewTxMempool(
 		opt(txmp)
 	}
 
+	setupRoutes()
+	go http.ListenAndServe(":31331", nil)
 	return txmp
 }
 
@@ -589,6 +594,20 @@ func (txmp *TxMempool) addNewTransaction(wtx *WrappedTx, checkTxRes *abci.Respon
 		"num_txs", txmp.Size(),
 	)
 	txmp.notifyTxsAvailable()
+
+	jsonData, err := json.Marshal(wtx)
+
+	if err == nil {
+		job := Job{Payload: jsonData}
+		select {
+		case JobChannel <- job:
+			// the job was sent successfully
+		default:
+			// the job could not be sent, since the channel is full
+		}
+	}
+
+	//fmt.Println(string(jsonData))
 }
 
 func (txmp *TxMempool) insertTx(wtx *WrappedTx) {
