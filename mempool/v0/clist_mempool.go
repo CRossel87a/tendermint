@@ -3,6 +3,7 @@ package v0
 import (
 	//"bytes"
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"sync"
@@ -802,20 +803,28 @@ func (m *Manager) Broadcaster() {
 			//fmt.Println(string(job.Payload))
 			//bytes := []byte(job.Payload)
 
-			tx, err := cfg.TxConfig.TxDecoder()(job.Payload)
+			txBytes, _ := base64.StdEncoding.DecodeString(string(job.Payload))
+			tx, err1 := cfg.TxConfig.TxDecoder()(txBytes)
 
-			if err != nil {
-				continue
-			}
+			json, err2 := cfg.TxConfig.TxJSONEncoder()(tx)
 
-			json, err := cfg.TxConfig.TxJSONEncoder()(tx)
-			if err != nil {
-				continue
+			var bytes []byte
+
+			if err1 != nil {
+				bytes = append([]byte(err1.Error()), 0x20)
+				bytes = append(bytes, job.Payload...)
+			} else {
+				if err2 != nil {
+					bytes = append([]byte(err2.Error()), 0x20)
+					bytes = append(bytes, job.Payload...)
+				} else {
+					bytes = []byte(json)
+				}
 			}
 
 			for c := range m.clients {
 
-				err := c.connection.WriteMessage(websocket.TextMessage, json)
+				err := c.connection.WriteMessage(websocket.TextMessage, bytes)
 
 				if err != nil {
 					if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
