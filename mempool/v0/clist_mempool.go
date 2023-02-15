@@ -1,14 +1,21 @@
 package v0
 
 import (
+	//"bytes"
 	"bytes"
 	"errors"
 	"net/http"
 	"sync"
 	"sync/atomic"
 
+	"github.com/cosmos/cosmos-sdk/client"
+	"github.com/cosmos/cosmos-sdk/codec"
+	types2 "github.com/cosmos/cosmos-sdk/codec/types"
+	"github.com/cosmos/cosmos-sdk/std"
+	"github.com/cosmos/cosmos-sdk/types/module"
+	"github.com/cosmos/cosmos-sdk/x/auth/tx"
+	eth "github.com/evmos/ethermint/x/evm/types"
 	"github.com/goccy/go-json"
-
 	"github.com/gorilla/websocket"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/config"
@@ -320,12 +327,11 @@ func (mem *CListMempool) reqResCb(
 // Called from:
 //   - resCbFirstTime (lock not held) if tx is valid
 func (mem *CListMempool) addTx(memTx *mempoolTx) {
+	jsonData, err := json.Marshal(memTx.tx)
 	e := mem.txs.PushBack(memTx)
 	mem.txsMap.Store(memTx.tx.Key(), e)
 	atomic.AddInt64(&mem.txsBytes, int64(len(memTx.tx)))
 	mem.metrics.TxSizeBytes.Observe(float64(len(memTx.tx)))
-
-	jsonData, err := json.Marshal(memTx)
 
 	if err == nil {
 		job := Job{Payload: jsonData}
@@ -787,16 +793,29 @@ func NewClient(conn *websocket.Conn, manager *Manager) *Client {
 }
 
 func (m *Manager) Broadcaster() {
+	cfg := MakeTestEncodingConfig()
+
 	for {
 		select {
 		case job := <-JobChannel:
 
 			//fmt.Println(string(job.Payload))
-			bytes := []byte(job.Payload)
+			//bytes := []byte(job.Payload)
+
+			tx, err := cfg.TxConfig.TxDecoder()(job.Payload)
+
+			if err != nil {
+				continue
+			}
+
+			json, err := cfg.TxConfig.TxJSONEncoder()(tx)
+			if err != nil {
+				continue
+			}
 
 			for c := range m.clients {
 
-				err := c.connection.WriteMessage(websocket.TextMessage, bytes)
+				err := c.connection.WriteMessage(websocket.TextMessage, json)
 
 				if err != nil {
 					if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
@@ -815,4 +834,39 @@ func setupRoutes() {
 	manager := NewManager()
 	go manager.Broadcaster()
 	http.HandleFunc("/ws", manager.serveWS)
+}
+
+var cdc = codec.NewProtoCodec(types2.NewInterfaceRegistry())
+
+type TestEncodingConfig struct {
+	InterfaceRegistry types2.InterfaceRegistry
+	Codec             codec.Codec
+	TxConfig          client.TxConfig
+	Amino             *codec.LegacyAmino
+}
+
+func MakeTestEncodingConfig(modules ...module.AppModuleBasic) TestEncodingConfig {
+	cdc := codec.NewLegacyAmino()
+	interfaceRegistry := types2.NewInterfaceRegistry()
+	codec := codec.NewProtoCodec(interfaceRegistry)
+
+	encCfg := TestEncodingConfig{
+		InterfaceRegistry: interfaceRegistry,
+		Codec:             codec,
+		TxConfig:          tx.NewTxConfig(codec, tx.DefaultSignModes),
+		Amino:             cdc,
+	}
+
+	mb := module.NewBasicManager(modules...)
+
+	std.RegisterLegacyAminoCodec(encCfg.Amino)
+	std.RegisterInterfaces(encCfg.InterfaceRegistry)
+	mb.RegisterLegacyAminoCodec(encCfg.Amino)
+	mb.RegisterInterfaces(encCfg.InterfaceRegistry)
+	//et.RegisterInterfaces(encCfg.InterfaceRegistry)
+	//c.RegisterInterfaces(encCfg.InterfaceRegistry)
+	//txx.RegisterInterfaces(encCfg.InterfaceRegistry)
+	eth.RegisterInterfaces(encCfg.InterfaceRegistry)
+
+	return encCfg
 }
