@@ -1,6 +1,6 @@
 # Unreleased Changes
 
-## v0.34.25
+## v0.34.24
 
 ### BREAKING CHANGES
 
@@ -20,3 +20,5 @@
 
 ### BUG FIXES
 
+- `[rpc]` \#9692 Remove `Cache-Control` header response from `/check_tx`
+  endpoint (@JayT106)

@@ -431,10 +431,7 @@ func (wsc *wsConnection) writeRoutine() {
 				return
 			}
 		case msg := <-wsc.writeChan:
-			// Use json.MarshalIndent instead of Marshal for pretty output.
-			// Pretty output not necessary, since most consumers of WS events are
-			// automated processes, not humans.
-			jsonBytes, err := json.Marshal(msg)
+			jsonBytes, err := json.MarshalIndent(msg, "", "  ")
 			if err != nil {
 				wsc.Logger.Error("Failed to marshal RPCResponse to JSON", "err", err)
 				continue
