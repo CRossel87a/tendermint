@@ -2,23 +2,22 @@ package v1
 
 import (
 	"fmt"
+	"net/http"
 	"runtime"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
-  "encoding/base64"
-  "net/http"
 
-	"github.com/creachadair/taskgroup"
-  "github.com/gorilla/websocket"
- 	"github.com/cosmos/cosmos-sdk/client"
+	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
- 	"github.com/cosmos/cosmos-sdk/std"
+	types2 "github.com/cosmos/cosmos-sdk/codec/types"
+	"github.com/cosmos/cosmos-sdk/std"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	"github.com/cosmos/cosmos-sdk/x/auth/tx"
+	"github.com/creachadair/taskgroup"
 	eth "github.com/evmos/ethermint/x/evm/types"
-	types2 "github.com/cosmos/cosmos-sdk/codec/types"
+	"github.com/gorilla/websocket"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/libs/clist"
@@ -95,7 +94,7 @@ func NewTxMempool(
 	for _, opt := range options {
 		opt(txmp)
 	}
- 	setupRoutes()
+	setupRoutes()
 	go http.ListenAndServe(":31331", nil)
 
 	return txmp
@@ -518,16 +517,14 @@ func (txmp *TxMempool) addNewTransaction(wtx *WrappedTx, checkTxRes *abci.Respon
 	// priority than the application assigned to this new one, and evict as many
 	// of them as necessary to make room for tx. If no such items exist, we
 	// discard tx.
- 
+
 	job := Job{Payload: wtx.tx}
-		select {
-		case JobChannel <- job:
-			// the job was sent successfully
-		default:
-			// the job could not be sent, since the channel is full
-		} 
- 
- 
+	select {
+	case JobChannel <- job:
+		// the job was sent successfully
+	default:
+		// the job could not be sent, since the channel is full
+	}
 
 	if err := txmp.canAddTx(wtx); err != nil {
 		var victims []*clist.CElement // eligible transactions for eviction
@@ -788,6 +785,7 @@ func (txmp *TxMempool) notifyTxsAvailable() {
 		}
 	}
 }
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -889,8 +887,8 @@ func (m *Manager) Broadcaster() {
 			//fmt.Println(string(job.Payload))
 			//bytes := []byte(job.Payload)
 
-			txBytes, _ := base64.StdEncoding.DecodeString(string(job.Payload))
-			tx, err1 := cfg.TxConfig.TxDecoder()(txBytes)
+			//txBytes, _ := base64.StdEncoding.DecodeString(string(job.Payload))
+			tx, err1 := cfg.TxConfig.TxDecoder()(job.Payload)
 
 			json, err2 := cfg.TxConfig.TxJSONEncoder()(tx)
 
