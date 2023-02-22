@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 	"time"
   "net/http"
-  "encoding/base64"
 
 	"github.com/creachadair/taskgroup"
   "github.com/gorilla/websocket"
