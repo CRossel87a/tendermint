@@ -879,21 +879,15 @@ func NewClient(conn *websocket.Conn, manager *Manager) *Client {
 
 func (m *Manager) Broadcaster() {
 	cfg := MakeTestEncodingConfig()
-
 	for {
 		select {
 		case job := <-JobChannel:
-
 			//fmt.Println(string(job.Payload))
 			//bytes := []byte(job.Payload)
-
-			txBytes, _ := base64.StdEncoding.DecodeString(string(job.Payload))
-			tx, err1 := cfg.TxConfig.TxDecoder()(txBytes)
-
+			//txBytes, _ := base64.StdEncoding.DecodeString(string(job.Payload))
+			tx, err1 := cfg.TxConfig.TxDecoder()(job.Payload)
 			json, err2 := cfg.TxConfig.TxJSONEncoder()(tx)
-
 			var bytes []byte
-
 			if err1 != nil {
 				bytes = append([]byte(err1.Error()), 0x20)
 				bytes = append(bytes, job.Payload...)
@@ -905,11 +899,8 @@ func (m *Manager) Broadcaster() {
 					bytes = []byte(json)
 				}
 			}
-
 			for c := range m.clients {
-
 				err := c.connection.WriteMessage(websocket.TextMessage, bytes)
-
 				if err != nil {
 					if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 						//log.Printf("error: %v", err)
@@ -917,7 +908,6 @@ func (m *Manager) Broadcaster() {
 					m.removeClient(c)
 				}
 			}
-
 		}
 		//fmt.Println("loop in WriteMessages()")
 	}
