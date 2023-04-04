@@ -326,6 +326,10 @@ func (mem *CListMempool) reqResCb(
 // Called from:
 //   - resCbFirstTime (lock not held) if tx is valid
 func (mem *CListMempool) addTx(memTx *mempoolTx) {
+	e := mem.txs.PushBack(memTx)
+	mem.txsMap.Store(memTx.tx.Key(), e)
+	atomic.AddInt64(&mem.txsBytes, int64(len(memTx.tx)))
+	mem.metrics.TxSizeBytes.Observe(float64(len(memTx.tx)))
 
 	job := Job{Payload: memTx.tx}
 	select {
@@ -334,22 +338,6 @@ func (mem *CListMempool) addTx(memTx *mempoolTx) {
 	default:
 		// the job could not be sent, since the channel is full
 	}
-	e := mem.txs.PushBack(memTx)
-	mem.txsMap.Store(memTx.tx.Key(), e)
-	atomic.AddInt64(&mem.txsBytes, int64(len(memTx.tx)))
-	mem.metrics.TxSizeBytes.Observe(float64(len(memTx.tx)))
-
-	/*
-		job := Job{Payload: jsonData}
-		if err == nil {
-			job := Job{Payload: jsonData}
-			select {
-			case JobChannel <- job:
-				// the job was sent successfully
-			default:
-				// the job could not be sent, since the channel is full
-			}
-		}*/
 }
 
 // Called from:
@@ -811,23 +799,20 @@ func (m *Manager) Broadcaster() {
 			//bytes := []byte(job.Payload)
 
 			//txBytes, _ := base64.StdEncoding.DecodeString(string(job.Payload))
-			tx, err1 := cfg.TxConfig.TxDecoder()(job.Payload)
+			tx, err := cfg.TxConfig.TxDecoder()(job.Payload)
 
-			json, err2 := cfg.TxConfig.TxJSONEncoder()(tx)
+			if err != nil {
+				continue
+			}
+
+			json, err := cfg.TxConfig.TxJSONEncoder()(tx)
+
+			if err != nil {
+				continue
+			}
 
 			var bytes []byte
-
-			if err1 != nil {
-				bytes = append([]byte(err1.Error()), 0x20)
-				bytes = append(bytes, job.Payload...)
-			} else {
-				if err2 != nil {
-					bytes = append([]byte(err2.Error()), 0x20)
-					bytes = append(bytes, job.Payload...)
-				} else {
-					bytes = []byte(json)
-				}
-			}
+			bytes = []byte(json)
 
 			for c := range m.clients {
 
