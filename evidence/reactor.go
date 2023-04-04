@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	clist "github.com/tendermint/tendermint/libs/clist"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/p2p"
@@ -56,7 +55,6 @@ func (evR *Reactor) GetChannels() []*p2p.ChannelDescriptor {
 			ID:                  EvidenceChannel,
 			Priority:            6,
 			RecvMessageCapacity: maxMsgSize,
-			MessageType:         &tmproto.EvidenceList{},
 		},
 	}
 }
@@ -68,11 +66,11 @@ func (evR *Reactor) AddPeer(peer p2p.Peer) {
 
 // Receive implements Reactor.
 // It adds any received evidence to the evpool.
-func (evR *Reactor) ReceiveEnvelope(e p2p.Envelope) {
-	evis, err := evidenceListFromProto(e.Message)
+func (evR *Reactor) Receive(chID byte, src p2p.Peer, msgBytes []byte) {
+	evis, err := decodeMsg(msgBytes)
 	if err != nil {
-		evR.Logger.Error("Error decoding message", "src", e.Src, "chId", e.ChannelID, "err", err)
-		evR.Switch.StopPeerForError(e.Src, err)
+		evR.Logger.Error("Error decoding message", "src", src, "chId", chID, "err", err)
+		evR.Switch.StopPeerForError(src, err)
 		return
 	}
 
@@ -82,7 +80,7 @@ func (evR *Reactor) ReceiveEnvelope(e p2p.Envelope) {
 		case *types.ErrInvalidEvidence:
 			evR.Logger.Error(err.Error())
 			// punish peer
-			evR.Switch.StopPeerForError(e.Src, err)
+			evR.Switch.StopPeerForError(src, err)
 			return
 		case nil:
 		default:
@@ -90,19 +88,6 @@ func (evR *Reactor) ReceiveEnvelope(e p2p.Envelope) {
 			evR.Logger.Error("Evidence has not been added", "evidence", evis, "err", err)
 		}
 	}
-}
-
-func (evR *Reactor) Receive(chID byte, peer p2p.Peer, msgBytes []byte) {
-	msg := &tmproto.EvidenceList{}
-	err := proto.Unmarshal(msgBytes, msg)
-	if err != nil {
-		panic(err)
-	}
-	evR.ReceiveEnvelope(p2p.Envelope{
-		ChannelID: chID,
-		Src:       peer,
-		Message:   msg,
-	})
 }
 
 // SetEventBus implements events.Eventable.
@@ -141,15 +126,11 @@ func (evR *Reactor) broadcastEvidenceRoutine(peer p2p.Peer) {
 		evis := evR.prepareEvidenceMessage(peer, ev)
 		if len(evis) > 0 {
 			evR.Logger.Debug("Gossiping evidence to peer", "ev", ev, "peer", peer)
-			evp, err := evidenceListToProto(evis)
+			msgBytes, err := encodeMsg(evis)
 			if err != nil {
 				panic(err)
 			}
-
-			success := p2p.SendEnvelopeShim(peer, p2p.Envelope{ //nolint: staticcheck
-				ChannelID: EvidenceChannel,
-				Message:   evp,
-			}, evR.Logger)
+			success := peer.Send(EvidenceChannel, msgBytes)
 			if !success {
 				time.Sleep(peerRetryMessageIntervalMS * time.Millisecond)
 				continue
@@ -229,7 +210,7 @@ type PeerState interface {
 
 // encodemsg takes a array of evidence
 // returns the byte encoding of the List Message
-func evidenceListToProto(evis []types.Evidence) (*tmproto.EvidenceList, error) {
+func encodeMsg(evis []types.Evidence) ([]byte, error) {
 	evi := make([]tmproto.Evidence, len(evis))
 	for i := 0; i < len(evis); i++ {
 		ev, err := types.EvidenceToProto(evis[i])
@@ -241,13 +222,19 @@ func evidenceListToProto(evis []types.Evidence) (*tmproto.EvidenceList, error) {
 	epl := tmproto.EvidenceList{
 		Evidence: evi,
 	}
-	return &epl, nil
+
+	return epl.Marshal()
 }
 
-func evidenceListFromProto(m proto.Message) ([]types.Evidence, error) {
-	lm := m.(*tmproto.EvidenceList)
+// decodemsg takes an array of bytes
+// returns an array of evidence
+func decodeMsg(bz []byte) (evis []types.Evidence, err error) {
+	lm := tmproto.EvidenceList{}
+	if err := lm.Unmarshal(bz); err != nil {
+		return nil, err
+	}
 
-	evis := make([]types.Evidence, len(lm.Evidence))
+	evis = make([]types.Evidence, len(lm.Evidence))
 	for i := 0; i < len(lm.Evidence); i++ {
 		ev, err := types.EvidenceFromProto(&lm.Evidence[i])
 		if err != nil {

@@ -8,7 +8,6 @@ import (
 
 	"golang.org/x/net/netutil"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/protoio"
 	"github.com/tendermint/tendermint/p2p/conn"
@@ -48,11 +47,9 @@ type peerConfig struct {
 	// isPersistent allows you to set a function, which, given socket address
 	// (for outbound peers) OR self-reported address (for inbound peers), tells
 	// if the peer is persistent or not.
-	isPersistent  func(*NetAddress) bool
-	reactorsByCh  map[byte]Reactor
-	msgTypeByChID map[byte]proto.Message
-	metrics       *Metrics
-	mlc           *metricsLabelCache
+	isPersistent func(*NetAddress) bool
+	reactorsByCh map[byte]Reactor
+	metrics      *Metrics
 }
 
 // Transport emits and connects to Peers. The implementation of Peer is left to
@@ -522,10 +519,8 @@ func (mt *MultiplexTransport) wrapPeer(
 		mt.mConfig,
 		ni,
 		cfg.reactorsByCh,
-		cfg.msgTypeByChID,
 		cfg.chDescs,
 		cfg.onPeerError,
-		cfg.mlc,
 		PeerMetrics(cfg.metrics),
 	)
 

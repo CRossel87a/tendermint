@@ -1,3 +1,4 @@
+// nolint: goconst
 package main
 
 import (
@@ -55,8 +56,6 @@ func LoadConfig(file string) (*Config, error) {
 
 // Validate validates the configuration. We don't do exhaustive config
 // validation here, instead relying on Testnet.Validate() to handle it.
-//
-//nolint:goconst
 func (cfg Config) Validate() error {
 	switch {
 	case cfg.ChainID == "":

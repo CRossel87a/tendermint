@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -186,7 +187,7 @@ func cleanup(cfg TestHarnessConfig) {
 }
 
 func makeTempFile(name, content string) string {
-	tempFile, err := os.CreateTemp("", fmt.Sprintf("%s-*", name))
+	tempFile, err := ioutil.TempFile("", fmt.Sprintf("%s-*", name))
 	if err != nil {
 		panic(err)
 	}

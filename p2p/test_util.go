@@ -149,10 +149,8 @@ func (sw *Switch) addPeerWithConnection(conn net.Conn) error {
 		MConnConfig(sw.config),
 		ni,
 		sw.reactorsByCh,
-		sw.msgTypeByChID,
 		sw.chDescs,
 		sw.StopPeerForError,
-		sw.mlc,
 	)
 
 	if err = sw.addPeer(p); err != nil {

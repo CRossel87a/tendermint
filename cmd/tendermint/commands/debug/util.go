@@ -3,7 +3,7 @@ package debug
 import (
 	"context"
 	"fmt"
-	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"path"
@@ -67,17 +67,16 @@ func copyConfig(home, dir string) error {
 func dumpProfile(dir, addr, profile string, debug int) error {
 	endpoint := fmt.Sprintf("%s/debug/pprof/%s?debug=%d", addr, profile, debug)
 
-	//nolint:gosec,nolintlint
-	resp, err := http.Get(endpoint)
+	resp, err := http.Get(endpoint) //nolint: gosec
 	if err != nil {
 		return fmt.Errorf("failed to query for %s profile: %w", profile, err)
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("failed to read %s profile response body: %w", profile, err)
 	}
 
-	return os.WriteFile(path.Join(dir, fmt.Sprintf("%s.out", profile)), body, os.ModePerm)
+	return ioutil.WriteFile(path.Join(dir, fmt.Sprintf("%s.out", profile)), body, os.ModePerm)
 }

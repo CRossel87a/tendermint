@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"os"
+	"io/ioutil"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
@@ -82,6 +82,7 @@ type State struct {
 
 // Copy makes a copy of the State for mutating.
 func (state State) Copy() State {
+
 	return State{
 		Version:       state.Version,
 		ChainID:       state.ChainID,
@@ -238,6 +239,7 @@ func (state State) MakeBlock(
 	evidence []types.Evidence,
 	proposerAddress []byte,
 ) (*types.Block, *types.PartSet) {
+
 	// Build base block with block data.
 	block := types.MakeBlock(height, txs, commit, evidence)
 
@@ -301,7 +303,7 @@ func MakeGenesisStateFromFile(genDocFile string) (State, error) {
 
 // MakeGenesisDocFromFile reads and unmarshals genesis doc from the given file.
 func MakeGenesisDocFromFile(genDocFile string) (*types.GenesisDoc, error) {
-	genDocJSON, err := os.ReadFile(genDocFile)
+	genDocJSON, err := ioutil.ReadFile(genDocFile)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't read GenesisDoc file: %v", err)
 	}

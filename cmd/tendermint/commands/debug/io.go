@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -67,6 +68,7 @@ func zipDir(src, dest string) error {
 		_, err = io.Copy(headerWriter, file)
 		return err
 	})
+
 }
 
 // copyFile copies a file from src to dest and returns an error upon failure. The
@@ -109,5 +111,5 @@ func writeStateJSONToFile(state interface{}, dir, filename string) error {
 		return fmt.Errorf("failed to encode state dump: %w", err)
 	}
 
-	return os.WriteFile(path.Join(dir, filename), stateJSON, os.ModePerm)
+	return ioutil.WriteFile(path.Join(dir, filename), stateJSON, os.ModePerm)
 }

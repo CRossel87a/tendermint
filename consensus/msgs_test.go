@@ -80,15 +80,17 @@ func TestMsgToProto(t *testing.T) {
 			Step:                  1,
 			SecondsSinceStartTime: 1,
 			LastCommitRound:       2,
-		}, (&tmcons.NewRoundStep{
-			Height:                2,
-			Round:                 1,
-			Step:                  1,
-			SecondsSinceStartTime: 1,
-			LastCommitRound:       2,
-		}).Wrap().(*tmcons.Message),
-
-			false},
+		}, &tmcons.Message{
+			Sum: &tmcons.Message_NewRoundStep{
+				NewRoundStep: &tmcons.NewRoundStep{
+					Height:                2,
+					Round:                 1,
+					Step:                  1,
+					SecondsSinceStartTime: 1,
+					LastCommitRound:       2,
+				},
+			},
+		}, false},
 
 		{"successful NewValidBlockMessage", &NewValidBlockMessage{
 			Height:             1,
@@ -96,78 +98,92 @@ func TestMsgToProto(t *testing.T) {
 			BlockPartSetHeader: psh,
 			BlockParts:         bits,
 			IsCommit:           false,
-		}, (&tmcons.NewValidBlock{
-			Height:             1,
-			Round:              1,
-			BlockPartSetHeader: pbPsh,
-			BlockParts:         pbBits,
-			IsCommit:           false,
-		}).Wrap().(*tmcons.Message),
-
-			false},
+		}, &tmcons.Message{
+			Sum: &tmcons.Message_NewValidBlock{
+				NewValidBlock: &tmcons.NewValidBlock{
+					Height:             1,
+					Round:              1,
+					BlockPartSetHeader: pbPsh,
+					BlockParts:         pbBits,
+					IsCommit:           false,
+				},
+			},
+		}, false},
 		{"successful BlockPartMessage", &BlockPartMessage{
 			Height: 100,
 			Round:  1,
 			Part:   &parts,
-		}, (&tmcons.BlockPart{
-			Height: 100,
-			Round:  1,
-			Part:   *pbParts,
-		}).Wrap().(*tmcons.Message),
-
-			false},
+		}, &tmcons.Message{
+			Sum: &tmcons.Message_BlockPart{
+				BlockPart: &tmcons.BlockPart{
+					Height: 100,
+					Round:  1,
+					Part:   *pbParts,
+				},
+			},
+		}, false},
 		{"successful ProposalPOLMessage", &ProposalPOLMessage{
 			Height:           1,
 			ProposalPOLRound: 1,
 			ProposalPOL:      bits,
-		}, (&tmcons.ProposalPOL{
-			Height:           1,
-			ProposalPolRound: 1,
-			ProposalPol:      *pbBits,
-		}).Wrap().(*tmcons.Message),
-			false},
+		}, &tmcons.Message{
+			Sum: &tmcons.Message_ProposalPol{
+				ProposalPol: &tmcons.ProposalPOL{
+					Height:           1,
+					ProposalPolRound: 1,
+					ProposalPol:      *pbBits,
+				},
+			}}, false},
 		{"successful ProposalMessage", &ProposalMessage{
 			Proposal: &proposal,
-		}, (&tmcons.Proposal{
-			Proposal: *pbProposal,
-		}).Wrap().(*tmcons.Message),
-
-			false},
+		}, &tmcons.Message{
+			Sum: &tmcons.Message_Proposal{
+				Proposal: &tmcons.Proposal{
+					Proposal: *pbProposal,
+				},
+			},
+		}, false},
 		{"successful VoteMessage", &VoteMessage{
 			Vote: vote,
-		}, (&tmcons.Vote{
-			Vote: pbVote,
-		}).Wrap().(*tmcons.Message),
-
-			false},
+		}, &tmcons.Message{
+			Sum: &tmcons.Message_Vote{
+				Vote: &tmcons.Vote{
+					Vote: pbVote,
+				},
+			},
+		}, false},
 		{"successful VoteSetMaj23", &VoteSetMaj23Message{
 			Height:  1,
 			Round:   1,
 			Type:    1,
 			BlockID: bi,
-		}, (&tmcons.VoteSetMaj23{
-			Height:  1,
-			Round:   1,
-			Type:    1,
-			BlockID: pbBi,
-		}).Wrap().(*tmcons.Message),
-
-			false},
+		}, &tmcons.Message{
+			Sum: &tmcons.Message_VoteSetMaj23{
+				VoteSetMaj23: &tmcons.VoteSetMaj23{
+					Height:  1,
+					Round:   1,
+					Type:    1,
+					BlockID: pbBi,
+				},
+			},
+		}, false},
 		{"successful VoteSetBits", &VoteSetBitsMessage{
 			Height:  1,
 			Round:   1,
 			Type:    1,
 			BlockID: bi,
 			Votes:   bits,
-		}, (&tmcons.VoteSetBits{
-			Height:  1,
-			Round:   1,
-			Type:    1,
-			BlockID: pbBi,
-			Votes:   *pbBits,
-		}).Wrap().(*tmcons.Message),
-
-			false},
+		}, &tmcons.Message{
+			Sum: &tmcons.Message_VoteSetBits{
+				VoteSetBits: &tmcons.VoteSetBits{
+					Height:  1,
+					Round:   1,
+					Type:    1,
+					BlockID: pbBi,
+					Votes:   *pbBits,
+				},
+			},
+		}, false},
 		{"failure", nil, &tmcons.Message{}, true},
 	}
 	for _, tt := range testsCases {

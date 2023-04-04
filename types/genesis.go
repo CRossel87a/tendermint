@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
+	"io/ioutil"
 	"time"
 
 	"github.com/tendermint/tendermint/crypto"
@@ -52,7 +52,7 @@ func (genDoc *GenesisDoc) SaveAs(file string) error {
 	if err != nil {
 		return err
 	}
-	return tmos.WriteFile(file, genDocBytes, 0o644)
+	return tmos.WriteFile(file, genDocBytes, 0644)
 }
 
 // ValidatorHash returns the hash of the validator set contained in the GenesisDoc
@@ -126,7 +126,7 @@ func GenesisDocFromJSON(jsonBlob []byte) (*GenesisDoc, error) {
 
 // GenesisDocFromFile reads JSON data from a file and unmarshalls it into a GenesisDoc.
 func GenesisDocFromFile(genDocFile string) (*GenesisDoc, error) {
-	jsonBlob, err := os.ReadFile(genDocFile)
+	jsonBlob, err := ioutil.ReadFile(genDocFile)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't read GenesisDoc file: %w", err)
 	}

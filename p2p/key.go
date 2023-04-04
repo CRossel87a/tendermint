@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
-	"os"
+	"io/ioutil"
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/ed25519"
@@ -70,7 +70,7 @@ func LoadOrGenNodeKey(filePath string) (*NodeKey, error) {
 
 // LoadNodeKey loads NodeKey located in filePath.
 func LoadNodeKey(filePath string) (*NodeKey, error) {
-	jsonBytes, err := os.ReadFile(filePath)
+	jsonBytes, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func (nodeKey *NodeKey) SaveAs(filePath string) error {
 	if err != nil {
 		return err
 	}
-	err = os.WriteFile(filePath, jsonBytes, 0o600)
+	err = ioutil.WriteFile(filePath, jsonBytes, 0600)
 	if err != nil {
 		return err
 	}

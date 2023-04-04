@@ -9,8 +9,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	dbm "github.com/tendermint/tm-db"
-
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	tmcfg "github.com/tendermint/tendermint/config"
 	prototmstate "github.com/tendermint/tendermint/proto/tendermint/state"
@@ -18,6 +16,7 @@ import (
 	"github.com/tendermint/tendermint/state/mocks"
 	txmocks "github.com/tendermint/tendermint/state/txindex/mocks"
 	"github.com/tendermint/tendermint/types"
+	dbm "github.com/tendermint/tm-db"
 )
 
 const (

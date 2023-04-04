@@ -3,6 +3,7 @@ package consensus
 import (
 	"bytes"
 	"crypto/rand"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -26,7 +27,7 @@ const (
 )
 
 func TestWALTruncate(t *testing.T) {
-	walDir, err := os.MkdirTemp("", "wal")
+	walDir, err := ioutil.TempDir("", "wal")
 	require.NoError(t, err)
 	defer os.RemoveAll(walDir)
 
@@ -108,7 +109,7 @@ func TestWALEncoderDecoder(t *testing.T) {
 }
 
 func TestWALWrite(t *testing.T) {
-	walDir, err := os.MkdirTemp("", "wal")
+	walDir, err := ioutil.TempDir("", "wal")
 	require.NoError(t, err)
 	defer os.RemoveAll(walDir)
 	walFile := filepath.Join(walDir, "wal")
@@ -176,7 +177,7 @@ func TestWALSearchForEndHeight(t *testing.T) {
 }
 
 func TestWALPeriodicSync(t *testing.T) {
-	walDir, err := os.MkdirTemp("", "wal")
+	walDir, err := ioutil.TempDir("", "wal")
 	require.NoError(t, err)
 	defer os.RemoveAll(walDir)
 
@@ -268,23 +269,18 @@ func BenchmarkWalDecode512B(b *testing.B) {
 func BenchmarkWalDecode10KB(b *testing.B) {
 	benchmarkWalDecode(b, 10*1024)
 }
-
 func BenchmarkWalDecode100KB(b *testing.B) {
 	benchmarkWalDecode(b, 100*1024)
 }
-
 func BenchmarkWalDecode1MB(b *testing.B) {
 	benchmarkWalDecode(b, 1024*1024)
 }
-
 func BenchmarkWalDecode10MB(b *testing.B) {
 	benchmarkWalDecode(b, 10*1024*1024)
 }
-
 func BenchmarkWalDecode100MB(b *testing.B) {
 	benchmarkWalDecode(b, 100*1024*1024)
 }
-
 func BenchmarkWalDecode1GB(b *testing.B) {
 	benchmarkWalDecode(b, 1024*1024*1024)
 }

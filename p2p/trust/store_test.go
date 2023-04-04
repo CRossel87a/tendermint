@@ -5,6 +5,7 @@ package trust
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"testing"
 
@@ -16,7 +17,7 @@ import (
 )
 
 func TestTrustMetricStoreSaveLoad(t *testing.T) {
-	dir, err := os.MkdirTemp("", "trust_test")
+	dir, err := ioutil.TempDir("", "trust_test")
 	require.NoError(t, err)
 	defer os.Remove(dir)
 

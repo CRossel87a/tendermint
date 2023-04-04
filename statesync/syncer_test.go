@@ -98,27 +98,13 @@ func TestSyncer_SyncAny(t *testing.T) {
 	// Adding a couple of peers should trigger snapshot discovery messages
 	peerA := &p2pmocks.Peer{}
 	peerA.On("ID").Return(p2p.ID("a"))
-	peerA.On("SendEnvelope", mock.MatchedBy(func(i interface{}) bool {
-		e, ok := i.(p2p.Envelope)
-		if !ok {
-			return false
-		}
-		req, ok := e.Message.(*ssproto.SnapshotsRequest)
-		return ok && e.ChannelID == SnapshotChannel && req != nil
-	})).Return(true)
+	peerA.On("Send", SnapshotChannel, mustEncodeMsg(&ssproto.SnapshotsRequest{})).Return(true)
 	syncer.AddPeer(peerA)
 	peerA.AssertExpectations(t)
 
 	peerB := &p2pmocks.Peer{}
 	peerB.On("ID").Return(p2p.ID("b"))
-	peerB.On("SendEnvelope", mock.MatchedBy(func(i interface{}) bool {
-		e, ok := i.(p2p.Envelope)
-		if !ok {
-			return false
-		}
-		req, ok := e.Message.(*ssproto.SnapshotsRequest)
-		return ok && e.ChannelID == SnapshotChannel && req != nil
-	})).Return(true)
+	peerB.On("Send", SnapshotChannel, mustEncodeMsg(&ssproto.SnapshotsRequest{})).Return(true)
 	syncer.AddPeer(peerB)
 	peerB.AssertExpectations(t)
 
@@ -161,9 +147,9 @@ func TestSyncer_SyncAny(t *testing.T) {
 	chunkRequests := make(map[uint32]int)
 	chunkRequestsMtx := tmsync.Mutex{}
 	onChunkRequest := func(args mock.Arguments) {
-		e, ok := args[0].(p2p.Envelope)
-		require.True(t, ok)
-		msg := e.Message.(*ssproto.ChunkRequest)
+		pb, err := decodeMsg(args[1].([]byte))
+		require.NoError(t, err)
+		msg := pb.(*ssproto.ChunkRequest)
 		require.EqualValues(t, 1, msg.Height)
 		require.EqualValues(t, 1, msg.Format)
 		require.LessOrEqual(t, msg.Index, uint32(len(chunks)))
@@ -176,14 +162,8 @@ func TestSyncer_SyncAny(t *testing.T) {
 		chunkRequests[msg.Index]++
 		chunkRequestsMtx.Unlock()
 	}
-	peerA.On("SendEnvelope", mock.MatchedBy(func(i interface{}) bool {
-		e, ok := i.(p2p.Envelope)
-		return ok && e.ChannelID == ChunkChannel
-	})).Maybe().Run(onChunkRequest).Return(true)
-	peerB.On("SendEnvelope", mock.MatchedBy(func(i interface{}) bool {
-		e, ok := i.(p2p.Envelope)
-		return ok && e.ChannelID == ChunkChannel
-	})).Maybe().Run(onChunkRequest).Return(true)
+	peerA.On("Send", ChunkChannel, mock.Anything).Maybe().Run(onChunkRequest).Return(true)
+	peerB.On("Send", ChunkChannel, mock.Anything).Maybe().Run(onChunkRequest).Return(true)
 
 	// The first time we're applying chunk 2 we tell it to retry the snapshot and discard chunk 1,
 	// which should cause it to keep the existing chunk 0 and 2, and restart restoration from

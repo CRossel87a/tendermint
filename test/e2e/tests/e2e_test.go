@@ -66,27 +66,23 @@ func testNode(t *testing.T, testFunc func(*testing.T, e2e.Node)) {
 func loadTestnet(t *testing.T) e2e.Testnet {
 	t.Helper()
 
-	manifestFile := os.Getenv("E2E_MANIFEST")
-	if manifestFile == "" {
+	manifest := os.Getenv("E2E_MANIFEST")
+	if manifest == "" {
 		t.Skip("E2E_MANIFEST not set, not an end-to-end test run")
 	}
-	if !filepath.IsAbs(manifestFile) {
-		manifestFile = filepath.Join("..", manifestFile)
+	if !filepath.IsAbs(manifest) {
+		manifest = filepath.Join("..", manifest)
 	}
 
 	testnetCacheMtx.Lock()
 	defer testnetCacheMtx.Unlock()
-	if testnet, ok := testnetCache[manifestFile]; ok {
+	if testnet, ok := testnetCache[manifest]; ok {
 		return testnet
 	}
-	m, err := e2e.LoadManifest(manifestFile)
-	require.NoError(t, err)
-	ifd, err := e2e.NewDockerInfrastructureData(m)
-	require.NoError(t, err)
 
-	testnet, err := e2e.LoadTestnet(m, manifestFile, ifd)
+	testnet, err := e2e.LoadTestnet(manifest)
 	require.NoError(t, err)
-	testnetCache[manifestFile] = *testnet
+	testnetCache[manifest] = *testnet
 	return *testnet
 }
 

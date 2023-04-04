@@ -1,6 +1,7 @@
 package config
 
 import (
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,7 +23,7 @@ func TestEnsureRoot(t *testing.T) {
 	require := require.New(t)
 
 	// setup temp dir for test
-	tmpDir, err := os.MkdirTemp("", "config-test")
+	tmpDir, err := ioutil.TempDir("", "config-test")
 	require.Nil(err)
 	defer os.RemoveAll(tmpDir)
 
@@ -30,7 +31,7 @@ func TestEnsureRoot(t *testing.T) {
 	EnsureRoot(tmpDir)
 
 	// make sure config is set properly
-	data, err := os.ReadFile(filepath.Join(tmpDir, defaultConfigFilePath))
+	data, err := ioutil.ReadFile(filepath.Join(tmpDir, defaultConfigFilePath))
 	require.Nil(err)
 
 	if !checkConfig(string(data)) {
@@ -51,7 +52,7 @@ func TestEnsureTestRoot(t *testing.T) {
 	rootDir := cfg.RootDir
 
 	// make sure config is set properly
-	data, err := os.ReadFile(filepath.Join(rootDir, defaultConfigFilePath))
+	data, err := ioutil.ReadFile(filepath.Join(rootDir, defaultConfigFilePath))
 	require.Nil(err)
 
 	if !checkConfig(string(data)) {
@@ -67,7 +68,7 @@ func checkConfig(configFile string) bool {
 	var valid bool
 
 	// list of words we expect in the config
-	elems := []string{
+	var elems = []string{
 		"moniker",
 		"seeds",
 		"proxy_app",

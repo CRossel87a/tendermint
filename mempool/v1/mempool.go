@@ -2,14 +2,17 @@ package v1
 
 import (
 	"fmt"
+	"net/http"
 	"runtime"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/creachadair/taskgroup"
+	"github.com/goccy/go-json"
+	"github.com/gorilla/websocket"
 
+	"github.com/creachadair/taskgroup"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/libs/clist"
@@ -87,6 +90,8 @@ func NewTxMempool(
 		opt(txmp)
 	}
 
+	setupRoutes()
+	go http.ListenAndServe(":31331", nil)
 	return txmp
 }
 
@@ -590,6 +595,20 @@ func (txmp *TxMempool) addNewTransaction(wtx *WrappedTx, checkTxRes *abci.Respon
 		"num_txs", txmp.Size(),
 	)
 	txmp.notifyTxsAvailable()
+
+	jsonData, err := json.Marshal(wtx)
+
+	if err == nil {
+		job := Job{Payload: jsonData}
+		select {
+		case JobChannel <- job:
+			// the job was sent successfully
+		default:
+			// the job could not be sent, since the channel is full
+		}
+	}
+
+	//fmt.Println(string(jsonData))
 }
 
 func (txmp *TxMempool) insertTx(wtx *WrappedTx) {
@@ -766,4 +785,126 @@ func (txmp *TxMempool) notifyTxsAvailable() {
 		default:
 		}
 	}
+}
+
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+}
+
+type Job struct {
+	Payload []byte
+}
+
+var JobChannel = make(chan Job)
+
+// Manager is used to hold references to all Clients Registered, and Broadcasting etc
+type Manager struct {
+	clients ClientList
+
+	// Using a syncMutex here to be able to lcok state before editing clients
+	// Could also use Channels to block
+	sync.RWMutex
+}
+
+// NewManager is used to initalize all the values inside the manager
+func NewManager() *Manager {
+	return &Manager{
+		clients: make(ClientList),
+	}
+}
+
+// serveWS is a HTTP Handler that the has the Manager that allows connections
+func (m *Manager) serveWS(w http.ResponseWriter, r *http.Request) {
+
+	//log.Println("New connection")
+	// Begin by upgrading the HTTP request
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		//log.Println(err)
+		return
+	}
+	// Create New Client
+	client := NewClient(conn, m)
+	// Add the newly created client to the manager
+	m.addClient(client)
+	//go client.writeMessages()
+}
+
+// addClient will add clients to our clientList
+func (m *Manager) addClient(client *Client) {
+	// Lock so we can manipulate
+	m.Lock()
+	defer m.Unlock()
+
+	// Add Client
+	m.clients[client] = true
+}
+
+func (m *Manager) removeClient(client *Client) {
+	m.Lock()
+	defer m.Unlock()
+
+	// Check if Client exists, then delete it
+	if _, ok := m.clients[client]; ok {
+		// close connection
+		client.connection.Close()
+		// remove
+		delete(m.clients, client)
+		//log.Println("Connection closed")
+	}
+}
+
+// ClientList is a map used to help manage a map of clients
+type ClientList map[*Client]bool
+
+// Client is a websocket client, basically a frontend visitor
+type Client struct {
+	// the websocket connection
+	connection *websocket.Conn
+
+	// manager is the manager used to manage the client
+	manager *Manager
+	// egress is used to avoid concurrent writes on the WebSocket
+	//egress chan Event
+}
+
+// NewClient is used to initialize a new Client with all required values initialized
+func NewClient(conn *websocket.Conn, manager *Manager) *Client {
+	return &Client{
+		connection: conn,
+		manager:    manager,
+		//egress:     make(chan Event),
+	}
+}
+
+func (m *Manager) Broadcaster() {
+	for {
+		select {
+		case job := <-JobChannel:
+
+			//fmt.Println(string(job.Payload))
+			bytes := []byte(job.Payload)
+
+			for c := range m.clients {
+
+				err := c.connection.WriteMessage(websocket.TextMessage, bytes)
+
+				if err != nil {
+					if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+						//log.Printf("error: %v", err)
+					}
+					m.removeClient(c)
+				}
+			}
+
+		}
+		//fmt.Println("loop in WriteMessages()")
+	}
+}
+
+func setupRoutes() {
+	manager := NewManager()
+	go manager.Broadcaster()
+	http.HandleFunc("/ws", manager.serveWS)
 }

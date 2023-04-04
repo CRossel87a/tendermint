@@ -9,13 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/behaviour"
+	bc "github.com/tendermint/tendermint/blockchain"
 	cfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
@@ -53,19 +53,30 @@ func (mp mockPeer) NodeInfo() p2p.NodeInfo {
 func (mp mockPeer) Status() conn.ConnectionStatus { return conn.ConnectionStatus{} }
 func (mp mockPeer) SocketAddr() *p2p.NetAddress   { return &p2p.NetAddress{} }
 
-func (mp mockPeer) SendEnvelope(e p2p.Envelope) bool    { return true }
-func (mp mockPeer) TrySendEnvelope(e p2p.Envelope) bool { return true }
-
 func (mp mockPeer) Send(byte, []byte) bool    { return true }
 func (mp mockPeer) TrySend(byte, []byte) bool { return true }
 
 func (mp mockPeer) Set(string, interface{}) {}
 func (mp mockPeer) Get(string) interface{}  { return struct{}{} }
 
-func (mp mockPeer) SetRemovalFailed()      {}
-func (mp mockPeer) GetRemovalFailed() bool { return false }
+type mockBlockStore struct {
+	blocks map[int64]*types.Block
+}
 
-type mockBlockApplier struct{}
+func (ml *mockBlockStore) Height() int64 {
+	return int64(len(ml.blocks))
+}
+
+func (ml *mockBlockStore) LoadBlock(height int64) *types.Block {
+	return ml.blocks[height]
+}
+
+func (ml *mockBlockStore) SaveBlock(block *types.Block, part *types.PartSet, commit *types.Commit) {
+	ml.blocks[block.Height] = block
+}
+
+type mockBlockApplier struct {
+}
 
 // XXX: Add whitelist/blacklist?
 func (mba *mockBlockApplier) ApplyBlock(
@@ -115,7 +126,8 @@ func (sio *mockSwitchIo) trySwitchToConsensus(state sm.State, skipWAL bool) bool
 	return true
 }
 
-func (sio *mockSwitchIo) broadcastStatusRequest() {
+func (sio *mockSwitchIo) broadcastStatusRequest() error {
+	return nil
 }
 
 type testReactorParams struct {
@@ -336,7 +348,9 @@ func newTestReactor(p testReactorParams) *BlockchainReactor {
 // }
 
 func TestReactorHelperMode(t *testing.T) {
-	channelID := byte(0x40)
+	var (
+		channelID = byte(0x40)
+	)
 
 	config := cfg.ResetTestRoot("blockchain_reactor_v2_test")
 	defer os.RemoveAll(config.RootDir)
@@ -352,7 +366,7 @@ func TestReactorHelperMode(t *testing.T) {
 
 	type testEvent struct {
 		peer  string
-		event proto.Message
+		event interface{}
 	}
 
 	tests := []struct {
@@ -364,10 +378,10 @@ func TestReactorHelperMode(t *testing.T) {
 			name:   "status request",
 			params: params,
 			msgs: []testEvent{
-				{"P1", &bcproto.StatusRequest{}},
-				{"P1", &bcproto.BlockRequest{Height: 13}},
-				{"P1", &bcproto.BlockRequest{Height: 20}},
-				{"P1", &bcproto.BlockRequest{Height: 22}},
+				{"P1", bcproto.StatusRequest{}},
+				{"P1", bcproto.BlockRequest{Height: 13}},
+				{"P1", bcproto.BlockRequest{Height: 20}},
+				{"P1", bcproto.BlockRequest{Height: 22}},
 			},
 		},
 	}
@@ -384,27 +398,25 @@ func TestReactorHelperMode(t *testing.T) {
 			for i := 0; i < len(tt.msgs); i++ {
 				step := tt.msgs[i]
 				switch ev := step.event.(type) {
-				case *bcproto.StatusRequest:
+				case bcproto.StatusRequest:
 					old := mockSwitch.numStatusResponse
-					reactor.ReceiveEnvelope(p2p.Envelope{
-						ChannelID: channelID,
-						Src:       mockPeer{id: p2p.ID(step.peer)},
-						Message:   ev})
+					msg, err := bc.EncodeMsg(&ev)
+					assert.NoError(t, err)
+					reactor.Receive(channelID, mockPeer{id: p2p.ID(step.peer)}, msg)
 					assert.Equal(t, old+1, mockSwitch.numStatusResponse)
-				case *bcproto.BlockRequest:
+				case bcproto.BlockRequest:
 					if ev.Height > params.startHeight {
 						old := mockSwitch.numNoBlockResponse
-						reactor.ReceiveEnvelope(p2p.Envelope{
-							ChannelID: channelID,
-							Src:       mockPeer{id: p2p.ID(step.peer)},
-							Message:   ev})
+						msg, err := bc.EncodeMsg(&ev)
+						assert.NoError(t, err)
+						reactor.Receive(channelID, mockPeer{id: p2p.ID(step.peer)}, msg)
 						assert.Equal(t, old+1, mockSwitch.numNoBlockResponse)
 					} else {
 						old := mockSwitch.numBlockResponse
-						reactor.ReceiveEnvelope(p2p.Envelope{
-							ChannelID: channelID,
-							Src:       mockPeer{id: p2p.ID(step.peer)},
-							Message:   ev})
+						msg, err := bc.EncodeMsg(&ev)
+						assert.NoError(t, err)
+						assert.NoError(t, err)
+						reactor.Receive(channelID, mockPeer{id: p2p.ID(step.peer)}, msg)
 						assert.Equal(t, old+1, mockSwitch.numBlockResponse)
 					}
 				}
@@ -413,34 +425,6 @@ func TestReactorHelperMode(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
-}
-
-func TestLegacyReactorReceiveBasic(t *testing.T) {
-	config := cfg.ResetTestRoot("blockchain_reactor_v2_test")
-	defer os.RemoveAll(config.RootDir)
-	genDoc, privVals := randGenesisDoc(config.ChainID(), 1, false, 30)
-	params := testReactorParams{
-		logger:      log.TestingLogger(),
-		genDoc:      genDoc,
-		privVals:    privVals,
-		startHeight: 20,
-		mockA:       true,
-	}
-	reactor := newTestReactor(params)
-	mockSwitch := &mockSwitchIo{switchedToConsensus: false}
-	reactor.io = mockSwitch
-	peer := p2p.CreateRandomPeer(false)
-
-	reactor.InitPeer(peer)
-	reactor.AddPeer(peer)
-	m := &bcproto.StatusRequest{}
-	wm := m.Wrap()
-	msg, err := proto.Marshal(wm)
-	assert.NoError(t, err)
-
-	assert.NotPanics(t, func() {
-		reactor.Receive(BlockchainChannel, peer, msg)
-	})
 }
 
 func TestReactorSetSwitchNil(t *testing.T) {
@@ -479,8 +463,7 @@ type testApp struct {
 }
 
 func randGenesisDoc(chainID string, numValidators int, randPower bool, minPower int64) (
-	*types.GenesisDoc, []types.PrivValidator,
-) {
+	*types.GenesisDoc, []types.PrivValidator) {
 	validators := make([]types.GenesisValidator, numValidators)
 	privValidators := make([]types.PrivValidator, numValidators)
 	for i := 0; i < numValidators; i++ {
@@ -505,8 +488,7 @@ func randGenesisDoc(chainID string, numValidators int, randPower bool, minPower 
 func newReactorStore(
 	genDoc *types.GenesisDoc,
 	privVals []types.PrivValidator,
-	maxBlockHeight int64,
-) (*store.BlockStore, sm.State, *sm.BlockExecutor) {
+	maxBlockHeight int64) (*store.BlockStore, sm.State, *sm.BlockExecutor) {
 	if len(privVals) != 1 {
 		panic("only support one validator")
 	}
@@ -530,8 +512,7 @@ func newReactorStore(
 
 	db := dbm.NewMemDB()
 	stateStore = sm.NewStore(db, sm.StoreOptions{
-		DiscardABCIResponses: false,
-	},
+		DiscardABCIResponses: false},
 	)
 	blockExec := sm.NewBlockExecutor(stateStore, log.TestingLogger(), proxyApp.Consensus(),
 		mock.Mempool{}, sm.EmptyEvidencePool{})

@@ -1,3 +1,4 @@
+// nolint: gosec
 package main
 
 import (
@@ -44,35 +45,25 @@ func NewCLI() *CLI {
 			if err != nil {
 				return err
 			}
-			multiVersion, err := cmd.Flags().GetString("multi-version")
-			if err != nil {
-				return err
-			}
-			return cli.generate(dir, groups, multiVersion)
+			return cli.generate(dir, groups)
 		},
 	}
 
 	cli.root.PersistentFlags().StringP("dir", "d", "", "Output directory for manifests")
 	_ = cli.root.MarkPersistentFlagRequired("dir")
-	cli.root.PersistentFlags().StringP("multi-version", "m", "", "Comma-separated list of versions of Tendermint to test in the generated testnets, "+
-		"or empty to only use this branch's version")
 	cli.root.PersistentFlags().IntP("groups", "g", 0, "Number of groups")
 
 	return cli
 }
 
 // generate generates manifests in a directory.
-func (cli *CLI) generate(dir string, groups int, multiVersion string) error {
-	err := os.MkdirAll(dir, 0o755)
+func (cli *CLI) generate(dir string, groups int) error {
+	err := os.MkdirAll(dir, 0755)
 	if err != nil {
 		return err
 	}
 
-	cfg := &generateConfig{
-		randSource:   rand.New(rand.NewSource(randomSeed)), //nolint:gosec
-		multiVersion: multiVersion,
-	}
-	manifests, err := Generate(cfg)
+	manifests, err := Generate(rand.New(rand.NewSource(randomSeed)))
 	if err != nil {
 		return err
 	}

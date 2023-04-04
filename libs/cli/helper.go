@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -18,7 +19,7 @@ func WriteConfigVals(dir string, vals map[string]string) error {
 		data += fmt.Sprintf("%s = \"%s\"\n", k, v)
 	}
 	cfile := filepath.Join(dir, "config.toml")
-	return os.WriteFile(cfile, []byte(data), 0o600)
+	return ioutil.WriteFile(cfile, []byte(data), 0600)
 }
 
 // RunWithArgs executes the given command with the specified command line args

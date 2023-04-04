@@ -5,8 +5,6 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-
 	bc "github.com/tendermint/tendermint/blockchain"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/p2p"
@@ -146,20 +144,21 @@ func (bcR *BlockchainReactor) GetChannels() []*p2p.ChannelDescriptor {
 			SendQueueCapacity:   1000,
 			RecvBufferCapacity:  50 * 4096,
 			RecvMessageCapacity: bc.MaxMsgSize,
-			MessageType:         &bcproto.Message{},
 		},
 	}
 }
 
 // AddPeer implements Reactor by sending our state to peer.
 func (bcR *BlockchainReactor) AddPeer(peer p2p.Peer) {
-	p2p.SendEnvelopeShim(peer, p2p.Envelope{ //nolint: staticcheck
-		ChannelID: BlockchainChannel,
-		Message: &bcproto.StatusResponse{
-			Base:   bcR.store.Base(),
-			Height: bcR.store.Height(),
-		},
-	}, bcR.Logger)
+	msgBytes, err := bc.EncodeMsg(&bcproto.StatusResponse{
+		Base:   bcR.store.Base(),
+		Height: bcR.store.Height()})
+	if err != nil {
+		bcR.Logger.Error("could not convert msg to protobuf", "err", err)
+		return
+	}
+
+	peer.Send(BlockchainChannel, msgBytes)
 	// it's OK if send fails. will try later in poolRoutine
 
 	// peer is added to the pool once we receive the first
@@ -183,71 +182,73 @@ func (bcR *BlockchainReactor) respondToPeer(msg *bcproto.BlockRequest,
 			bcR.Logger.Error("could not convert msg to protobuf", "err", err)
 			return false
 		}
-		return p2p.TrySendEnvelopeShim(src, p2p.Envelope{ //nolint: staticcheck
-			ChannelID: BlockchainChannel,
-			Message:   &bcproto.BlockResponse{Block: bl},
-		}, bcR.Logger)
+
+		msgBytes, err := bc.EncodeMsg(&bcproto.BlockResponse{Block: bl})
+		if err != nil {
+			bcR.Logger.Error("could not marshal msg", "err", err)
+			return false
+		}
+
+		return src.TrySend(BlockchainChannel, msgBytes)
 	}
 
-	return p2p.TrySendEnvelopeShim(src, p2p.Envelope{ //nolint: staticcheck
-		ChannelID: BlockchainChannel,
-		Message:   &bcproto.NoBlockResponse{Height: msg.Height},
-	}, bcR.Logger)
+	bcR.Logger.Info("Peer asking for a block we don't have", "src", src, "height", msg.Height)
+
+	msgBytes, err := bc.EncodeMsg(&bcproto.NoBlockResponse{Height: msg.Height})
+	if err != nil {
+		bcR.Logger.Error("could not convert msg to protobuf", "err", err)
+		return false
+	}
+
+	return src.TrySend(BlockchainChannel, msgBytes)
 }
 
-func (bcR *BlockchainReactor) ReceiveEnvelope(e p2p.Envelope) {
-	if err := bc.ValidateMsg(e.Message); err != nil {
-		bcR.Logger.Error("Peer sent us invalid msg", "peer", e.Src, "msg", e.Message, "err", err)
-		bcR.Switch.StopPeerForError(e.Src, err)
+// Receive implements Reactor by handling 4 types of messages (look below).
+func (bcR *BlockchainReactor) Receive(chID byte, src p2p.Peer, msgBytes []byte) {
+	msg, err := bc.DecodeMsg(msgBytes)
+	if err != nil {
+		bcR.Logger.Error("Error decoding message", "src", src, "chId", chID, "err", err)
+		bcR.Switch.StopPeerForError(src, err)
 		return
 	}
 
-	bcR.Logger.Debug("Receive", "e.Src", e.Src, "chID", e.ChannelID, "msg", e.Message)
+	if err = bc.ValidateMsg(msg); err != nil {
+		bcR.Logger.Error("Peer sent us invalid msg", "peer", src, "msg", msg, "err", err)
+		bcR.Switch.StopPeerForError(src, err)
+		return
+	}
 
-	switch msg := e.Message.(type) {
+	bcR.Logger.Debug("Receive", "src", src, "chID", chID, "msg", msg)
+
+	switch msg := msg.(type) {
 	case *bcproto.BlockRequest:
-		bcR.respondToPeer(msg, e.Src)
+		bcR.respondToPeer(msg, src)
 	case *bcproto.BlockResponse:
 		bi, err := types.BlockFromProto(msg.Block)
 		if err != nil {
 			bcR.Logger.Error("Block content is invalid", "err", err)
 			return
 		}
-		bcR.pool.AddBlock(e.Src.ID(), bi, msg.Block.Size())
+		bcR.pool.AddBlock(src.ID(), bi, len(msgBytes))
 	case *bcproto.StatusRequest:
 		// Send peer our state.
-		p2p.TrySendEnvelopeShim(e.Src, p2p.Envelope{ //nolint: staticcheck
-			ChannelID: BlockchainChannel,
-			Message: &bcproto.StatusResponse{
-				Height: bcR.store.Height(),
-				Base:   bcR.store.Base(),
-			},
-		}, bcR.Logger)
+		msgBytes, err := bc.EncodeMsg(&bcproto.StatusResponse{
+			Height: bcR.store.Height(),
+			Base:   bcR.store.Base(),
+		})
+		if err != nil {
+			bcR.Logger.Error("could not convert msg to protobut", "err", err)
+			return
+		}
+		src.TrySend(BlockchainChannel, msgBytes)
 	case *bcproto.StatusResponse:
 		// Got a peer status. Unverified.
-		bcR.pool.SetPeerRange(e.Src.ID(), msg.Base, msg.Height)
+		bcR.pool.SetPeerRange(src.ID(), msg.Base, msg.Height)
 	case *bcproto.NoBlockResponse:
-		bcR.Logger.Debug("Peer does not have requested block", "peer", e.Src, "height", msg.Height)
+		bcR.Logger.Debug("Peer does not have requested block", "peer", src, "height", msg.Height)
 	default:
 		bcR.Logger.Error(fmt.Sprintf("Unknown message type %v", reflect.TypeOf(msg)))
 	}
-}
-
-func (bcR *BlockchainReactor) Receive(chID byte, peer p2p.Peer, msgBytes []byte) {
-	msg := &bcproto.Message{}
-	err := proto.Unmarshal(msgBytes, msg)
-	if err != nil {
-		panic(err)
-	}
-	uw, err := msg.Unwrap()
-	if err != nil {
-		panic(err)
-	}
-	bcR.ReceiveEnvelope(p2p.Envelope{
-		ChannelID: chID,
-		Src:       peer,
-		Message:   uw,
-	})
 }
 
 // Handle messages from the poolReactor telling the reactor what to do.
@@ -285,10 +286,13 @@ func (bcR *BlockchainReactor) poolRoutine(stateSynced bool) {
 				if peer == nil {
 					continue
 				}
-				queued := p2p.TrySendEnvelopeShim(peer, p2p.Envelope{ //nolint: staticcheck
-					ChannelID: BlockchainChannel,
-					Message:   &bcproto.BlockRequest{Height: request.Height},
-				}, bcR.Logger)
+				msgBytes, err := bc.EncodeMsg(&bcproto.BlockRequest{Height: request.Height})
+				if err != nil {
+					bcR.Logger.Error("could not convert msg to proto", "err", err)
+					continue
+				}
+
+				queued := peer.TrySend(BlockchainChannel, msgBytes)
 				if !queued {
 					bcR.Logger.Debug("Send queue is full, drop block request", "peer", peer.ID(), "height", request.Height)
 				}
@@ -421,9 +425,13 @@ FOR_LOOP:
 
 // BroadcastStatusRequest broadcasts `BlockStore` base and height.
 func (bcR *BlockchainReactor) BroadcastStatusRequest() error {
-	bcR.Switch.BroadcastEnvelope(p2p.Envelope{
-		ChannelID: BlockchainChannel,
-		Message:   &bcproto.StatusRequest{},
-	})
+	bm, err := bc.EncodeMsg(&bcproto.StatusRequest{})
+	if err != nil {
+		bcR.Logger.Error("could not convert msg to proto", "err", err)
+		return fmt.Errorf("could not convert msg to proto: %w", err)
+	}
+
+	bcR.Switch.Broadcast(BlockchainChannel, bm)
+
 	return nil
 }
