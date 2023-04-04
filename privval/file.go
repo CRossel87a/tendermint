@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"os"
+	"io/ioutil"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
@@ -64,7 +64,7 @@ func (pvKey FilePVKey) Save() {
 		panic(err)
 	}
 
-	if err := tempfile.WriteFileAtomic(outFile, jsonBytes, 0o600); err != nil {
+	if err := tempfile.WriteFileAtomic(outFile, jsonBytes, 0600); err != nil {
 		panic(err)
 	}
 }
@@ -90,6 +90,7 @@ type FilePVLastSignState struct {
 // we have already signed for this HRS, and can reuse the existing signature).
 // It panics if the HRS matches the arguments, there's a SignBytes, but no Signature.
 func (lss *FilePVLastSignState) CheckHRS(height int64, round int32, step int8) (bool, error) {
+
 	if lss.Height > height {
 		return false, fmt.Errorf("height regression. Got %v, last height %v", height, lss.Height)
 	}
@@ -132,7 +133,7 @@ func (lss *FilePVLastSignState) Save() {
 	if err != nil {
 		panic(err)
 	}
-	err = tempfile.WriteFileAtomic(outFile, jsonBytes, 0o600)
+	err = tempfile.WriteFileAtomic(outFile, jsonBytes, 0600)
 	if err != nil {
 		panic(err)
 	}
@@ -187,7 +188,7 @@ func LoadFilePVEmptyState(keyFilePath, stateFilePath string) *FilePV {
 
 // If loadState is true, we load from the stateFilePath. Otherwise, we use an empty LastSignState.
 func loadFilePV(keyFilePath, stateFilePath string, loadState bool) *FilePV {
-	keyJSONBytes, err := os.ReadFile(keyFilePath)
+	keyJSONBytes, err := ioutil.ReadFile(keyFilePath)
 	if err != nil {
 		tmos.Exit(err.Error())
 	}
@@ -205,7 +206,7 @@ func loadFilePV(keyFilePath, stateFilePath string, loadState bool) *FilePV {
 	pvState := FilePVLastSignState{}
 
 	if loadState {
-		stateJSONBytes, err := os.ReadFile(stateFilePath)
+		stateJSONBytes, err := ioutil.ReadFile(stateFilePath)
 		if err != nil {
 			tmos.Exit(err.Error())
 		}
@@ -383,8 +384,8 @@ func (pv *FilePV) signProposal(chainID string, proposal *tmproto.Proposal) error
 
 // Persist height/round/step and signature
 func (pv *FilePV) saveSigned(height int64, round int32, step int8,
-	signBytes []byte, sig []byte,
-) {
+	signBytes []byte, sig []byte) {
+
 	pv.LastSignState.Height = height
 	pv.LastSignState.Round = round
 	pv.LastSignState.Step = step

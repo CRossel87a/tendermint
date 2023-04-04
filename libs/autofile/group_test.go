@@ -2,6 +2,7 @@ package autofile
 
 import (
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,7 +17,7 @@ import (
 func createTestGroupWithHeadSizeLimit(t *testing.T, headSizeLimit int64) *Group {
 	testID := tmrand.Str(12)
 	testDir := "_test_" + testID
-	err := tmos.EnsureDir(testDir, 0o700)
+	err := tmos.EnsureDir(testDir, 0700)
 	require.NoError(t, err, "Error creating dir")
 
 	headPath := testDir + "/myfile"
@@ -121,7 +122,7 @@ func TestRotateFile(t *testing.T) {
 		}
 	}()
 
-	dir, err := os.MkdirTemp("", "rotate_test")
+	dir, err := ioutil.TempDir("", "rotate_test")
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 	err = os.Chdir(dir)
@@ -150,21 +151,21 @@ func TestRotateFile(t *testing.T) {
 	require.NoError(t, err)
 
 	// Read g.Head.Path+"000"
-	body1, err := os.ReadFile(g.Head.Path + ".000")
+	body1, err := ioutil.ReadFile(g.Head.Path + ".000")
 	assert.NoError(t, err, "Failed to read first rolled file")
 	if string(body1) != "Line 1\nLine 2\nLine 3\n" {
 		t.Errorf("got unexpected contents: [%v]", string(body1))
 	}
 
 	// Read g.Head.Path
-	body2, err := os.ReadFile(g.Head.Path)
+	body2, err := ioutil.ReadFile(g.Head.Path)
 	assert.NoError(t, err, "Failed to read first rolled file")
 	if string(body2) != "Line 4\nLine 5\nLine 6\n" {
 		t.Errorf("got unexpected contents: [%v]", string(body2))
 	}
 
 	// Make sure there are no files in the current, temporary directory
-	files, err := os.ReadDir(".")
+	files, err := ioutil.ReadDir(".")
 	require.NoError(t, err)
 	assert.Empty(t, files)
 

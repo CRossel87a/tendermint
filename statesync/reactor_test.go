@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -54,18 +53,10 @@ func TestReactor_Receive_ChunkRequest(t *testing.T) {
 			peer.On("ID").Return(p2p.ID("id"))
 			var response *ssproto.ChunkResponse
 			if tc.expectResponse != nil {
-				peer.On("SendEnvelope", mock.MatchedBy(func(i interface{}) bool {
-					e, ok := i.(p2p.Envelope)
-					return ok && e.ChannelID == ChunkChannel
-				})).Run(func(args mock.Arguments) {
-					e := args[0].(p2p.Envelope)
-
-					// Marshal to simulate a wire roundtrip.
-					bz, err := proto.Marshal(e.Message)
+				peer.On("Send", ChunkChannel, mock.Anything).Run(func(args mock.Arguments) {
+					msg, err := decodeMsg(args[1].([]byte))
 					require.NoError(t, err)
-					err = proto.Unmarshal(bz, e.Message)
-					require.NoError(t, err)
-					response = e.Message.(*ssproto.ChunkResponse)
+					response = msg.(*ssproto.ChunkResponse)
 				}).Return(true)
 			}
 
@@ -80,11 +71,7 @@ func TestReactor_Receive_ChunkRequest(t *testing.T) {
 				}
 			})
 
-			r.ReceiveEnvelope(p2p.Envelope{
-				ChannelID: ChunkChannel,
-				Src:       peer,
-				Message:   tc.request,
-			})
+			r.Receive(ChunkChannel, peer, mustEncodeMsg(tc.request))
 			time.Sleep(100 * time.Millisecond)
 			assert.Equal(t, tc.expectResponse, response)
 
@@ -144,18 +131,10 @@ func TestReactor_Receive_SnapshotsRequest(t *testing.T) {
 			peer := &p2pmocks.Peer{}
 			if len(tc.expectResponses) > 0 {
 				peer.On("ID").Return(p2p.ID("id"))
-				peer.On("SendEnvelope", mock.MatchedBy(func(i interface{}) bool {
-					e, ok := i.(p2p.Envelope)
-					return ok && e.ChannelID == SnapshotChannel
-				})).Run(func(args mock.Arguments) {
-					e := args[0].(p2p.Envelope)
-
-					// Marshal to simulate a wire roundtrip.
-					bz, err := proto.Marshal(e.Message)
+				peer.On("Send", SnapshotChannel, mock.Anything).Run(func(args mock.Arguments) {
+					msg, err := decodeMsg(args[1].([]byte))
 					require.NoError(t, err)
-					err = proto.Unmarshal(bz, e.Message)
-					require.NoError(t, err)
-					responses = append(responses, e.Message.(*ssproto.SnapshotsResponse))
+					responses = append(responses, msg.(*ssproto.SnapshotsResponse))
 				}).Return(true)
 			}
 
@@ -170,11 +149,7 @@ func TestReactor_Receive_SnapshotsRequest(t *testing.T) {
 				}
 			})
 
-			r.ReceiveEnvelope(p2p.Envelope{
-				ChannelID: SnapshotChannel,
-				Src:       peer,
-				Message:   &ssproto.SnapshotsRequest{},
-			})
+			r.Receive(SnapshotChannel, peer, mustEncodeMsg(&ssproto.SnapshotsRequest{}))
 			time.Sleep(100 * time.Millisecond)
 			assert.Equal(t, tc.expectResponses, responses)
 
@@ -182,22 +157,4 @@ func TestReactor_Receive_SnapshotsRequest(t *testing.T) {
 			peer.AssertExpectations(t)
 		})
 	}
-}
-
-func TestLegacyReactorReceiveBasic(t *testing.T) {
-	cfg := config.DefaultStateSyncConfig()
-	conn := &proxymocks.AppConnSnapshot{}
-	reactor := NewReactor(*cfg, conn, nil, "")
-	peer := p2p.CreateRandomPeer(false)
-
-	reactor.InitPeer(peer)
-	reactor.AddPeer(peer)
-	m := &ssproto.ChunkRequest{Height: 1, Format: 1, Index: 1}
-	wm := m.Wrap()
-	msg, err := proto.Marshal(wm)
-	assert.NoError(t, err)
-
-	assert.NotPanics(t, func() {
-		reactor.Receive(ChunkChannel, peer, msg)
-	})
 }

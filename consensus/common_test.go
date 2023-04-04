@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"sync"
@@ -14,6 +14,8 @@ import (
 
 	"github.com/go-kit/log/term"
 	"github.com/stretchr/testify/require"
+
+	"path"
 
 	dbm "github.com/tendermint/tm-db"
 
@@ -90,8 +92,8 @@ func newValidatorStub(privValidator types.PrivValidator, valIndex int32) *valida
 func (vs *validatorStub) signVote(
 	voteType tmproto.SignedMsgType,
 	hash []byte,
-	header types.PartSetHeader,
-) (*types.Vote, error) {
+	header types.PartSetHeader) (*types.Vote, error) {
+
 	pubKey, err := vs.PrivValidator.GetPubKey()
 	if err != nil {
 		return nil, fmt.Errorf("can't get pubkey: %w", err)
@@ -139,8 +141,7 @@ func signVotes(
 	voteType tmproto.SignedMsgType,
 	hash []byte,
 	header types.PartSetHeader,
-	vss ...*validatorStub,
-) []*types.Vote {
+	vss ...*validatorStub) []*types.Vote {
 	votes := make([]*types.Vote, len(vss))
 	for i, vs := range vss {
 		votes[i] = signVote(vs, voteType, hash, header)
@@ -451,7 +452,7 @@ func newStateWithConfigAndBlockStore(
 
 func loadPrivValidator(config *cfg.Config) *privval.FilePV {
 	privValidatorKeyFile := config.PrivValidatorKeyFile()
-	ensureDir(filepath.Dir(privValidatorKeyFile), 0o700)
+	ensureDir(filepath.Dir(privValidatorKeyFile), 0700)
 	privValidatorStateFile := config.PrivValidatorStateFile()
 	privValidator := privval.LoadOrGenFilePV(privValidatorKeyFile, privValidatorStateFile)
 	privValidator.Reset()
@@ -478,8 +479,7 @@ func randState(nValidators int) (*State, []*validatorStub) {
 //-------------------------------------------------------------------------------
 
 func ensureNoNewEvent(ch <-chan tmpubsub.Message, timeout time.Duration,
-	errorMessage string,
-) {
+	errorMessage string) {
 	select {
 	case <-time.After(timeout):
 		break
@@ -657,8 +657,7 @@ func ensurePrevote(voteCh <-chan tmpubsub.Message, height int64, round int32) {
 }
 
 func ensureVote(voteCh <-chan tmpubsub.Message, height int64, round int32,
-	voteType tmproto.SignedMsgType,
-) {
+	voteType tmproto.SignedMsgType) {
 	select {
 	case <-time.After(ensureTimeout):
 		panic("Timeout expired while waiting for NewVote event")
@@ -714,8 +713,7 @@ func consensusLogger() log.Logger {
 }
 
 func randConsensusNet(nValidators int, testName string, tickerFunc func() TimeoutTicker,
-	appFunc func() abci.Application, configOpts ...func(*cfg.Config),
-) ([]*State, cleanupFunc) {
+	appFunc func() abci.Application, configOpts ...func(*cfg.Config)) ([]*State, cleanupFunc) {
 	genDoc, privVals := randGenesisDoc(nValidators, false, 30)
 	css := make([]*State, nValidators)
 	logger := consensusLogger()
@@ -731,7 +729,7 @@ func randConsensusNet(nValidators int, testName string, tickerFunc func() Timeou
 		for _, opt := range configOpts {
 			opt(thisConfig)
 		}
-		ensureDir(filepath.Dir(thisConfig.Consensus.WalFile()), 0o700) // dir for wal
+		ensureDir(filepath.Dir(thisConfig.Consensus.WalFile()), 0700) // dir for wal
 		app := appFunc()
 		vals := types.TM2PB.ValidatorUpdates(state.Validators)
 		app.InitChain(abci.RequestInitChain{Validators: vals})
@@ -768,7 +766,7 @@ func randConsensusNetWithPeers(
 		state, _ := stateStore.LoadFromDBOrGenesisDoc(genDoc)
 		thisConfig := ResetConfig(fmt.Sprintf("%s_%d", testName, i))
 		configRootDirs = append(configRootDirs, thisConfig.RootDir)
-		ensureDir(filepath.Dir(thisConfig.Consensus.WalFile()), 0o700) // dir for wal
+		ensureDir(filepath.Dir(thisConfig.Consensus.WalFile()), 0700) // dir for wal
 		if i == 0 {
 			peer0Config = thisConfig
 		}
@@ -776,11 +774,11 @@ func randConsensusNetWithPeers(
 		if i < nValidators {
 			privVal = privVals[i]
 		} else {
-			tempKeyFile, err := os.CreateTemp("", "priv_validator_key_")
+			tempKeyFile, err := ioutil.TempFile("", "priv_validator_key_")
 			if err != nil {
 				panic(err)
 			}
-			tempStateFile, err := os.CreateTemp("", "priv_validator_state_")
+			tempStateFile, err := ioutil.TempFile("", "priv_validator_state_")
 			if err != nil {
 				panic(err)
 			}
@@ -902,7 +900,7 @@ func newCounter() abci.Application {
 }
 
 func newPersistentKVStore() abci.Application {
-	dir, err := os.MkdirTemp("", "persistent-kvstore")
+	dir, err := ioutil.TempDir("", "persistent-kvstore")
 	if err != nil {
 		panic(err)
 	}

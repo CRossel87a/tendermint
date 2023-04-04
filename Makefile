@@ -200,7 +200,7 @@ format:
 
 lint:
 	@echo "--> Running linter"
-	@go run github.com/golangci/golangci-lint/cmd/golangci-lint run
+	@golangci-lint run
 .PHONY: lint
 
 DESTINATION = ./index.html.md

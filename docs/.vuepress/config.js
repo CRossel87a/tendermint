@@ -1,6 +1,14 @@
 module.exports = {
   theme: 'cosmos',
   title: 'Tendermint Core',
+  // locales: {
+  //   "/": {
+  //     lang: "en-US"
+  //   },
+  //   "/ru/": {
+  //     lang: "ru"
+  //   }
+  // },
   base: process.env.VUEPRESS_BASE,
   themeConfig: {
     repo: 'tendermint/tendermint',
@@ -15,12 +23,16 @@ module.exports = {
     },
     versions: [
       {
-        "label": "v0.34 (latest)",
+        "label": "v0.33",
+        "key": "v0.33"
+      },
+      {
+        "label": "v0.34",
         "key": "v0.34"
       },
       {
-        "label": "v0.33",
-        "key": "v0.33"
+        "label": "v0.35",
+        "key": "v0.35"
       }
     ],
     topbar: {
@@ -33,8 +45,10 @@ module.exports = {
           title: 'Resources',
           children: [
             {
+              // TODO(creachadair): Figure out how to make this per-branch.
+              // See: https://github.com/tendermint/tendermint/issues/7908
               title: 'RPC',
-              path: (process.env.VUEPRESS_BASE ? process.env.VUEPRESS_BASE : '/')+'rpc/',
+              path: 'https://docs.tendermint.com/v0.35/rpc/',
               static: true
             },
           ]
@@ -45,9 +59,9 @@ module.exports = {
       title: 'Help & Support',
       editLink: true,
       forum: {
-        title: 'Tendermint Discussions',
-        text: 'Join the Tendermint discussions to learn more',
-        url: 'https://github.com/tendermint/tendermint/discussions',
+        title: 'Tendermint Forum',
+        text: 'Join the Tendermint forum to learn more',
+        url: 'https://forum.cosmos.network/c/tendermint',
         bg: '#0B7E0B',
         logo: 'tendermint'
       },
@@ -58,7 +72,7 @@ module.exports = {
     },
     footer: {
       question: {
-        text: 'Chat with Tendermint developers in <a href=\'https://discord.gg/vcExX9T\' target=\'_blank\'>Discord</a> or reach out on <a href=\'https://github.com/tendermint/tendermint/discussions\' target=\'_blank\'>GitHub</a> to learn more.'
+        text: 'Chat with Tendermint developers in <a href=\'https://discord.gg/vcExX9T\' target=\'_blank\'>Discord</a> or reach out on the <a href=\'https://forum.cosmos.network/c/tendermint\' target=\'_blank\'>Tendermint Forum</a> to learn more.'
       },
       logo: '/logo-bw.svg',
       textLink: {
@@ -115,8 +129,8 @@ module.exports = {
               url: 'https://medium.com/@tendermint'
             },
             {
-              title: 'GitHub Discussions',
-              url: 'https://github.com/tendermint/tendermint/discussions'
+              title: 'Forum',
+              url: 'https://forum.cosmos.network/c/tendermint'
             }
           ]
         },

@@ -853,7 +853,7 @@ func TestScMarkReceived(t *testing.T) {
 	type args struct {
 		peerID p2p.ID
 		height int64
-		size   int
+		size   int64
 		tm     time.Time
 	}
 	tests := []struct {

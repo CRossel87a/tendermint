@@ -1,7 +1,7 @@
 package types
 
 import (
-	"io"
+	"io/ioutil"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -57,7 +57,7 @@ func TestBasicPartSet(t *testing.T) {
 
 	// Reconstruct data, assert that they are equal.
 	data2Reader := partSet2.GetReader()
-	data2, err := io.ReadAll(data2Reader)
+	data2, err := ioutil.ReadAll(data2Reader)
 	require.NoError(t, err)
 
 	assert.Equal(t, data, data2)
@@ -145,10 +145,8 @@ func TestParSetHeaderProtoBuf(t *testing.T) {
 		expPass bool
 	}{
 		{"success empty", &PartSetHeader{}, true},
-		{
-			"success",
-			&PartSetHeader{Total: 1, Hash: []byte("hash")}, true,
-		},
+		{"success",
+			&PartSetHeader{Total: 1, Hash: []byte("hash")}, true},
 	}
 
 	for _, tc := range testCases {
@@ -164,6 +162,7 @@ func TestParSetHeaderProtoBuf(t *testing.T) {
 }
 
 func TestPartProtoBuf(t *testing.T) {
+
 	proof := merkle.Proof{
 		Total:    1,
 		Index:    1,
@@ -176,10 +175,8 @@ func TestPartProtoBuf(t *testing.T) {
 	}{
 		{"failure empty", &Part{}, false},
 		{"failure nil", nil, false},
-		{
-			"success",
-			&Part{Index: 1, Bytes: tmrand.Bytes(32), Proof: proof}, true,
-		},
+		{"success",
+			&Part{Index: 1, Bytes: tmrand.Bytes(32), Proof: proof}, true},
 	}
 
 	for _, tc := range testCases {
