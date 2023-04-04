@@ -889,19 +889,19 @@ func (m *Manager) Broadcaster() {
 
 			//txBytes, _ := base64.StdEncoding.DecodeString(string(job.Payload))
 			tx, err := cfg.TxConfig.TxDecoder()(job.Payload)
-      
-      if err != nil {
-        continue
-      }
+
+			if err != nil {
+				continue
+			}
 
 			json, err := cfg.TxConfig.TxJSONEncoder()(tx)
-      
-      if err != nil {
-        continue
-      }
+
+			if err != nil {
+				continue
+			}
 
 			var bytes []byte
-      bytes = []byte(json)
+			bytes = []byte(json)
 
 			for c := range m.clients {
 
