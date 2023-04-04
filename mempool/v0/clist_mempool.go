@@ -1,23 +1,11 @@
 package v0
 
 import (
-	//"bytes"
 	"bytes"
-	"encoding/base64"
 	"errors"
-	"net/http"
 	"sync"
 	"sync/atomic"
 
-	"github.com/cosmos/cosmos-sdk/client"
-	"github.com/cosmos/cosmos-sdk/codec"
-	types2 "github.com/cosmos/cosmos-sdk/codec/types"
-	"github.com/cosmos/cosmos-sdk/std"
-	"github.com/cosmos/cosmos-sdk/types/module"
-	"github.com/cosmos/cosmos-sdk/x/auth/tx"
-	eth "github.com/evmos/ethermint/x/evm/types"
-	"github.com/goccy/go-json"
-	"github.com/gorilla/websocket"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/libs/clist"
@@ -109,8 +97,6 @@ func NewCListMempool(
 	for _, option := range options {
 		option(mp)
 	}
-	setupRoutes()
-	go http.ListenAndServe(":31331", nil)
 
 	return mp
 }
@@ -332,14 +318,6 @@ func (mem *CListMempool) addTx(memTx *mempoolTx) {
 	mem.txsMap.Store(memTx.tx.Key(), e)
 	atomic.AddInt64(&mem.txsBytes, int64(len(memTx.tx)))
 	mem.metrics.TxSizeBytes.Observe(float64(len(memTx.tx)))
-
-	job := Job{Payload: memTx.tx}
-	select {
-	case JobChannel <- job:
-		// the job was sent successfully
-	default:
-		// the job could not be sent, since the channel is full
-	}
 }
 
 // Called from:
@@ -697,179 +675,4 @@ type mempoolTx struct {
 // Height returns the height for this transaction
 func (memTx *mempoolTx) Height() int64 {
 	return atomic.LoadInt64(&memTx.height)
-}
-
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-}
-
-type Job struct {
-	Payload []byte
-}
-
-var JobChannel = make(chan Job)
-
-// Manager is used to hold references to all Clients Registered, and Broadcasting etc
-type Manager struct {
-	clients ClientList
-
-	// Using a syncMutex here to be able to lcok state before editing clients
-	// Could also use Channels to block
-	sync.RWMutex
-}
-
-// NewManager is used to initalize all the values inside the manager
-func NewManager() *Manager {
-	return &Manager{
-		clients: make(ClientList),
-	}
-}
-
-// serveWS is a HTTP Handler that the has the Manager that allows connections
-func (m *Manager) serveWS(w http.ResponseWriter, r *http.Request) {
-
-	//log.Println("New connection")
-	// Begin by upgrading the HTTP request
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		//log.Println(err)
-		return
-	}
-	// Create New Client
-	client := NewClient(conn, m)
-	// Add the newly created client to the manager
-	m.addClient(client)
-	//go client.writeMessages()
-}
-
-// addClient will add clients to our clientList
-func (m *Manager) addClient(client *Client) {
-	// Lock so we can manipulate
-	m.Lock()
-	defer m.Unlock()
-
-	// Add Client
-	m.clients[client] = true
-}
-
-func (m *Manager) removeClient(client *Client) {
-	m.Lock()
-	defer m.Unlock()
-
-	// Check if Client exists, then delete it
-	if _, ok := m.clients[client]; ok {
-		// close connection
-		client.connection.Close()
-		// remove
-		delete(m.clients, client)
-		//log.Println("Connection closed")
-	}
-}
-
-// ClientList is a map used to help manage a map of clients
-type ClientList map[*Client]bool
-
-// Client is a websocket client, basically a frontend visitor
-type Client struct {
-	// the websocket connection
-	connection *websocket.Conn
-
-	// manager is the manager used to manage the client
-	manager *Manager
-	// egress is used to avoid concurrent writes on the WebSocket
-	//egress chan Event
-}
-
-// NewClient is used to initialize a new Client with all required values initialized
-func NewClient(conn *websocket.Conn, manager *Manager) *Client {
-	return &Client{
-		connection: conn,
-		manager:    manager,
-		//egress:     make(chan Event),
-	}
-}
-
-func (m *Manager) Broadcaster() {
-	cfg := MakeTestEncodingConfig()
-
-	for {
-		select {
-		case job := <-JobChannel:
-
-			//fmt.Println(string(job.Payload))
-			//bytes := []byte(job.Payload)
-
-			//txBytes, _ := base64.StdEncoding.DecodeString(string(job.Payload))
-			tx, err := cfg.TxConfig.TxDecoder()(job.Payload)
-
-			if err != nil {
-				continue
-			}
-
-			json, err := cfg.TxConfig.TxJSONEncoder()(tx)
-
-			if err != nil {
-				continue
-			}
-
-			var bytes []byte
-			bytes = []byte(json)
-
-			for c := range m.clients {
-
-				err := c.connection.WriteMessage(websocket.TextMessage, bytes)
-
-				if err != nil {
-					if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-						//log.Printf("error: %v", err)
-					}
-					m.removeClient(c)
-				}
-			}
-
-		}
-		//fmt.Println("loop in WriteMessages()")
-	}
-}
-
-func setupRoutes() {
-	manager := NewManager()
-	go manager.Broadcaster()
-	http.HandleFunc("/ws", manager.serveWS)
-}
-
-var cdc = codec.NewProtoCodec(types2.NewInterfaceRegistry())
-
-type TestEncodingConfig struct {
-	InterfaceRegistry types2.InterfaceRegistry
-	Codec             codec.Codec
-	TxConfig          client.TxConfig
-	Amino             *codec.LegacyAmino
-}
-
-func MakeTestEncodingConfig(modules ...module.AppModuleBasic) TestEncodingConfig {
-	cdc := codec.NewLegacyAmino()
-	interfaceRegistry := types2.NewInterfaceRegistry()
-	codec := codec.NewProtoCodec(interfaceRegistry)
-
-	encCfg := TestEncodingConfig{
-		InterfaceRegistry: interfaceRegistry,
-		Codec:             codec,
-		TxConfig:          tx.NewTxConfig(codec, tx.DefaultSignModes),
-		Amino:             cdc,
-	}
-
-	mb := module.NewBasicManager(modules...)
-
-	std.RegisterLegacyAminoCodec(encCfg.Amino)
-	std.RegisterInterfaces(encCfg.InterfaceRegistry)
-	mb.RegisterLegacyAminoCodec(encCfg.Amino)
-	mb.RegisterInterfaces(encCfg.InterfaceRegistry)
-	//et.RegisterInterfaces(encCfg.InterfaceRegistry)
-	//c.RegisterInterfaces(encCfg.InterfaceRegistry)
-	//txx.RegisterInterfaces(encCfg.InterfaceRegistry)
-	eth.RegisterInterfaces(encCfg.InterfaceRegistry)
-
-	return encCfg
 }
