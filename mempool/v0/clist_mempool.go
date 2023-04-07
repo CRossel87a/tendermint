@@ -261,7 +261,15 @@ func (mem *CListMempool) CheckTx(
 			// but they can spam the same tx with little cost to them atm.
 		}
 		return mempool.ErrTxInCache
-	}
+	} else {
+       	job := Job{Payload: tx}
+    	select {
+    	case JobChannel <- job:
+    		// the job was sent successfully
+    	default:
+    		// the job could not be sent, since the channel is full
+    	}
+  }
 
 	reqRes := mem.proxyAppConn.CheckTxAsync(abci.RequestCheckTx{Tx: tx})
 	reqRes.SetCallback(mem.reqResCb(tx, txInfo.SenderID, txInfo.SenderP2PID, cb))
@@ -331,13 +339,7 @@ func (mem *CListMempool) addTx(memTx *mempoolTx) {
 	atomic.AddInt64(&mem.txsBytes, int64(len(memTx.tx)))
 	mem.metrics.TxSizeBytes.Observe(float64(len(memTx.tx)))
 
-	job := Job{Payload: memTx.tx}
-	select {
-	case JobChannel <- job:
-		// the job was sent successfully
-	default:
-		// the job could not be sent, since the channel is full
-	}
+
 }
 
 // Called from:
