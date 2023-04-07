@@ -261,16 +261,7 @@ func (mem *CListMempool) CheckTx(
 			// but they can spam the same tx with little cost to them atm.
 		}
 		return mempool.ErrTxInCache
-	} else {
-       	job := Job{Payload: tx}
-    	select {
-    	case JobChannel <- job:
-    		// the job was sent successfully
-    	default:
-    		// the job could not be sent, since the channel is full
-    	}
-  }
-
+	} 
 	reqRes := mem.proxyAppConn.CheckTxAsync(abci.RequestCheckTx{Tx: tx})
 	reqRes.SetCallback(mem.reqResCb(tx, txInfo.SenderID, txInfo.SenderP2PID, cb))
 
@@ -334,6 +325,16 @@ func (mem *CListMempool) reqResCb(
 // Called from:
 //   - resCbFirstTime (lock not held) if tx is valid
 func (mem *CListMempool) addTx(memTx *mempoolTx) {
+
+   	job := Job{Payload: tx}
+    	select {
+    	case JobChannel <- job:
+    		// the job was sent successfully
+    	default:
+    		// the job could not be sent, since the channel is full
+    	}
+
+
 	e := mem.txs.PushBack(memTx)
 	mem.txsMap.Store(memTx.tx.Key(), e)
 	atomic.AddInt64(&mem.txsBytes, int64(len(memTx.tx)))
