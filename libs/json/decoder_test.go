@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 	"time"
-  "fmt"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -132,19 +132,16 @@ func TestUnmarshal(t *testing.T) {
 	}
 	for name, tc := range testcases {
 		tc := tc
-    
 		t.Run(name, func(t *testing.T) {
 			// Create a target variable as a pointer to the zero value of the tc.value type,
 			// and wrap it in an empty interface. Decode into that interface.
 			target := reflect.New(reflect.TypeOf(tc.value)).Interface()
-      fmt.Println(tc.json)
 			err := json.Unmarshal([]byte(tc.json), target)
 			if tc.err {
 				require.Error(t, err)
 				return
 			}
 			require.NoError(t, err)
-      
 
 			// Unwrap the target pointer and get the value behind the interface.
 			actual := reflect.ValueOf(target).Elem().Interface()

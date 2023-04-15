@@ -3,6 +3,7 @@ package json_test
 import (
 	"testing"
 	"time"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -94,10 +95,8 @@ func TestMarshal(t *testing.T) {
 	}
 	for name, tc := range testcases {
 		tc := tc
-    
 		t.Run(name, func(t *testing.T) {
 			bz, err := json.Marshal(tc.value)
-      //fmt.Println(bz)
 			require.NoError(t, err)
 			assert.JSONEq(t, tc.output, string(bz))
 		})
