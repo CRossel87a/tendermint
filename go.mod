@@ -2,6 +2,12 @@ module github.com/tendermint/tendermint
 
 go 1.18
 
+
+require (
+	github.com/cosmos/cosmos-sdk v0.45.9
+	github.com/CRossel87a/ethermint cantov1
+)
+
 require (
 	github.com/BurntSushi/toml v1.2.1
 	github.com/ChainSafe/go-schnorrkel v0.0.0-20200405005733-88cbf1b4c40d
@@ -293,3 +299,4 @@ require (
 	mvdan.cc/lint v0.0.0-20170908181259-adc824a0674b // indirect
 	mvdan.cc/unparam v0.0.0-20220706161116-678bad134442 // indirect
 )
+replace github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alpha.regen.1
