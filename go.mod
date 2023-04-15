@@ -5,7 +5,7 @@ go 1.18
 
 require (
 	github.com/cosmos/cosmos-sdk v0.45.9
-	github.com/CRossel87a/ethermint cantov1
+	github.com/evmos/ethermint v0.19.3
 )
 
 require (
@@ -299,4 +299,7 @@ require (
 	mvdan.cc/lint v0.0.0-20170908181259-adc824a0674b // indirect
 	mvdan.cc/unparam v0.0.0-20220706161116-678bad134442 // indirect
 )
-replace github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alpha.regen.1
+replace (
+	github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alpha.regen.1
+	github.com/evmos/ethermint v0.19.3 => github.com/CRossel87a/ethermint cantov1
+)
