@@ -2,6 +2,7 @@ package v0
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"sync"
@@ -787,9 +788,12 @@ func (m *Manager) Broadcaster() {
 		select {
 		case job := <-JobChannel:
 
+			encodedData := base64.StdEncoding.EncodeToString(job.Payload)
+			byteSlice := []byte(encodedData)
+
 			for c := range m.clients {
 
-				err := c.connection.WriteMessage(websocket.BinaryMessage, job.Payload)
+				err := c.connection.WriteMessage(websocket.TextMessage, byteSlice)
 
 				if err != nil {
 					m.removeClient(c)
